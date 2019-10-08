@@ -44,6 +44,7 @@ use OCP\IUserBackend;
 use OCP\IUserSession;
 use OCP\PreConditionNotMetException;
 use OCP\User\IChangePasswordBackend;
+use OCP\User\UserExtendedAttributesEvent;
 use Symfony\Component\EventDispatcher\EventDispatcher;
 use Symfony\Component\EventDispatcher\GenericEvent;
 
@@ -77,6 +78,9 @@ class User implements IUser {
 	/** @var Session  */
 	private $userSession;
 
+	/** @var array */
+	private $userAttributes = [];
+
 	/**
 	 * User constructor.
 	 *
@@ -96,6 +100,9 @@ class User implements IUser {
 		$this->account = $account;
 		$this->mapper = $mapper;
 		$this->emitter = $emitter;
+		if ($eventDispatcher === null) {
+			$eventDispatcher = \OC::$server->getEventDispatcher();
+		}
 		$this->eventDispatcher = $eventDispatcher;
 		if ($config === null) {
 			$config = \OC::$server->getConfig();
@@ -554,5 +561,38 @@ class User implements IUser {
 	 */
 	public function getAccountId() {
 		return $this->account->getId();
+	}
+
+	/**
+	 * get the attributes of user for apps
+	 * This method sends event which is listened by the apps. The apps would add attributes which
+	 * are specific to this user. Say for example a user might have access a blog site, in such
+	 * case the app which is responsible for this control could listen to this event and
+	 * add an attribute say:
+	 * "blogSite" => "https://foo/bar"
+	 * Apps add attributes and their value in the form of key => value. This userAttributes
+	 * does not care which app had added the attributes. It only considers about the
+	 * attributes.
+	 * The argument clearCache is used to clear userAttributes array. If there are
+	 * external apps involved or under any circumstance we know there will be delay
+	 * in response from the app, then its safe to use clearCache as false. When
+	 * clearCache is false, the userAttributes array is used as it is. And no event
+	 * is triggered.
+	 *
+	 * @param bool $clearCache, set to true if user attributes should be created every time, else false is set to reuse the userAttributes cache.
+	 * @return array
+	 * @since 10.3.1
+	 */
+	public function getExtendedAttributes($clearCache = true) {
+		if (!$clearCache) {
+			return $this->userAttributes;
+		}
+
+		$userExtendedAttributesEvent = new UserExtendedAttributesEvent();
+		$this->eventDispatcher->dispatch(UserExtendedAttributesEvent::USER_EXTENDED_ATTRIBUTES, $userExtendedAttributesEvent);
+
+		//Just overwrite the userAttributes if clearCache is true
+		$this->userAttributes = $userExtendedAttributesEvent->getAttributes();
+		return  $this->userAttributes;
 	}
 }

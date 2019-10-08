@@ -160,9 +160,9 @@ class AppManager implements IAppManager {
 	 */
 	public function getEnabledAppsForUser(IUser $user = null) {
 		$apps = $this->getInstalledAppsValues();
-		$appsForUser = \array_filter($apps, function ($enabled) use ($user) {
-			return $this->checkAppForUser($enabled, $user);
-		});
+		$appsForUser = \array_filter($apps, function ($enabled, $appName) use ($user) {
+			return $this->checkAppForUser($enabled, $appName, $user);
+		}, ARRAY_FILTER_USE_BOTH);
 		return \array_keys($appsForUser);
 	}
 
@@ -182,7 +182,7 @@ class AppManager implements IAppManager {
 		}
 		$installedApps = $this->getInstalledAppsValues();
 		if (isset($installedApps[$appId])) {
-			return $this->checkAppForUser($installedApps[$appId], $user);
+			return $this->checkAppForUser($installedApps[$appId], $appId, $user);
 		} else {
 			return false;
 		}
@@ -191,9 +191,27 @@ class AppManager implements IAppManager {
 	/**
 	 * @param string $enabled
 	 * @param IUser $user
+	 * @param string $appName
 	 * @return bool
 	 */
-	private function checkAppForUser($enabled, $user) {
+	private function checkAppForUser($enabled, $appName, $user) {
+		if ($user !== null) {
+			$userAppAttributes = $user->getExtendedAttributes();
+			/**
+			 * Guests will only have access to some whitelisted apps
+			 * - If the list is missing (no "whitelistedApps" key found), the guest will have access to all the apps as any normal user. The same will happen if the "whitelistedApps" isn't an array.
+			 * - If the list is empty, the guest won't be able to use any app
+			 * - If the list has some apps, only those apps will be available for that guest
+			 *
+			 */
+			if (isset($userAppAttributes['whiteListedApps'])) {
+				$whiteListedAppsForGuest = $userAppAttributes['whiteListedApps'];
+				if (\is_array($whiteListedAppsForGuest)  && !\in_array($appName, $whiteListedAppsForGuest)) {
+					return false;
+				}
+			}
+		}
+
 		if ($enabled === 'yes') {
 			return true;
 		} elseif ($user === null) {

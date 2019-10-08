@@ -238,4 +238,14 @@ interface IUser {
 	 * @since 10.0.1
 	 */
 	public function getSearchTerms();
+
+	/**
+	 * Get attributes of user for apps
+	 * The attributes are of the form key => value map
+	 *
+	 * @param bool $clearCache
+	 * @return array
+	 * @since 10.3.1
+	 */
+	public function getExtendedAttributes($clearCache = true);
 }
