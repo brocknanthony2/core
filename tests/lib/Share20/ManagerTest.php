@@ -42,6 +42,7 @@ use OCP\IUserManager;
 use OCP\Security\IHasher;
 use OCP\Security\ISecureRandom;
 use OCP\Share\Exceptions\ShareNotFound;
+use OCP\Share\IAttributes;
 use OCP\Share\IProviderFactory;
 use OCP\Share\IShare;
 use OCP\Share\IShareProvider;
@@ -3492,6 +3493,70 @@ class ManagerTest extends \Test\TestCase {
 		$shares = $this->manager->getAllSharedWith($user, [\OCP\Share::SHARE_TYPE_GROUP, \OCP\Share::SHARE_TYPE_USER]);
 		$this->assertCount(2, $shares);
 		$this->assertSame($shares, [$share1, $share2]);
+	}
+
+	/**
+	 * @dataProvider strictSubsetOfAttributesDataProvider
+	 *
+	 * @param IAttributes $allowedAttributes
+	 * @param IAttributes $newAttributes
+	 * @param boolean $expected
+	 */
+	public function testStrictSubsetOfAttributes($allowedAttributes, $newAttributes, $expected) {
+		$this->assertEquals(
+			$expected,
+			$this->invokePrivate(
+				$this->manager,
+				'strictSubsetOfAttributes',
+				[$allowedAttributes, $newAttributes]
+			)
+		);
+	}
+
+	public function strictSubsetOfAttributesDataProvider() {
+		$providedValues = [];
+
+		// removal of attributes should result in false
+		$allowedAttributes = $this->createMock(IAttributes::class);
+		$newAttributes = $this->createMock(IAttributes::class);
+		$allowedAttributes->method('toArray')->willReturn([
+			['scope' => 'app1', 'key' => 'perm1', 'enabled' => false]
+		]);
+		$newAttributes->expects($this->at(0))
+			->method('getAttribute')->with('app1', 'perm1')->will($this->returnValue(null));
+		$providedValues[] = [$allowedAttributes, $newAttributes, false];
+
+		// increase of attributes should result in false
+		$allowedAttributes = $this->createMock(IAttributes::class);
+		$newAttributes = $this->createMock(IAttributes::class);
+		$allowedAttributes->method('toArray')->willReturn([
+			['scope' => 'app1', 'key' => 'perm1', 'enabled' => false]
+		]);
+		$newAttributes->expects($this->at(0))
+			->method('getAttribute')->with('app1', 'perm1')->will($this->returnValue(true));
+		$providedValues[] = [$allowedAttributes, $newAttributes, false];
+
+		// no change of attributes should result in true
+		$allowedAttributes = $this->createMock(IAttributes::class);
+		$newAttributes = $this->createMock(IAttributes::class);
+		$allowedAttributes->method('toArray')->willReturn([
+			['scope' => 'app1', 'key' => 'perm1', 'enabled' => true]
+		]);
+		$newAttributes->expects($this->at(0))
+			->method('getAttribute')->with('app1', 'perm1')->will($this->returnValue(true));
+		$providedValues[] = [$allowedAttributes, $newAttributes, true];
+
+		// decrease of attributes should result in true
+		$allowedAttributes = $this->createMock(IAttributes::class);
+		$newAttributes = $this->createMock(IAttributes::class);
+		$allowedAttributes->method('toArray')->willReturn([
+			['scope' => 'app1', 'key' => 'perm1', 'enabled' => true]
+		]);
+		$newAttributes->expects($this->at(0))
+			->method('getAttribute')->with('app1', 'perm1')->will($this->returnValue(false));
+		$providedValues[] = [$allowedAttributes, $newAttributes, true];
+
+		return $providedValues;
 	}
 
 	/**

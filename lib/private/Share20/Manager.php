@@ -322,6 +322,9 @@ class Manager implements IManager {
 		/* Use share node permission as default $maxPermissions */
 		$maxPermissions = $shareNode->getPermissions();
 
+		/* Attributes default is null, as attributes are restricted only in reshare */
+		$maxAttributes = null;
+
 		/*
 		 * Quick fix for #23536
 		 * Non moveable mount points do not have update and delete permissions
@@ -352,6 +355,7 @@ class Manager implements IManager {
 					'@phan-var \OCA\Files_Sharing\SharedStorage $shareFileStorage';
 					$parentShare = $shareFileStorage->getShare();
 					$maxPermissions = $parentShare->getPermissions();
+					$maxAttributes = $parentShare->getAttributes();
 				}
 			}
 		}
@@ -359,6 +363,11 @@ class Manager implements IManager {
 		/* Check that we do not share with more permissions than we have */
 		if (!$this->strictSubsetOfPermissions($maxPermissions, $share->getPermissions())) {
 			$message_t = $this->l->t('Cannot increase permissions of %s', [$share->getNode()->getPath()]);
+			throw new GenericShareException($message_t, $message_t, 404);
+		}
+
+		if ($maxAttributes !== null && !$this->strictSubsetOfAttributes($maxAttributes, $share->getAttributes())) {
+			$message_t = $this->l->t('Cannot set attributes of %s', [$share->getNode()->getPath()]);
 			throw new GenericShareException($message_t, $message_t, 404);
 		}
 	}
@@ -1665,5 +1674,25 @@ class Manager implements IManager {
 	 */
 	private function strictSubsetOfPermissions($allowedPermissions, $newPermissions) {
 		return (($allowedPermissions | $newPermissions) === $allowedPermissions);
+	}
+
+	/**
+	 * Check $newAttributes attribute is a subset of $allowedAttributes
+	 *
+	 * @param IAttributes $allowedAttributes
+	 * @param IAttributes $newAttributes
+	 * @return boolean ,true if $allowedAttributes enabled is super set of $newAttributes enabled, else false
+	 */
+	private function strictSubsetOfAttributes($allowedAttributes, $newAttributes) {
+		foreach ($allowedAttributes->toArray() as $allowedAttribute) {
+			$enabled = $newAttributes->getAttribute($allowedAttribute['scope'], $allowedAttribute['key']);
+
+			if (($allowedAttribute['enabled'] === $enabled) ||
+				($allowedAttribute['enabled'] === true && $enabled === false)) {
+				// set to the same value or disabling attribute
+				return true;
+			}
+		}
+		return false;
 	}
 }
